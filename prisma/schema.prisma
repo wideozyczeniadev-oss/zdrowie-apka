@@ -1,5 +1,5 @@
-// Zdrowie-apka schema
-// Aktywności dnia: posiłki, treningi, rutyny zdrowotne
+// Homeostaza — schemat danych
+// Personalna platforma zarzadzania zdrowiem dla osob z przewleklymi syndromami.
 
 generator client {
   provider = "prisma-client"
@@ -10,47 +10,108 @@ datasource db {
   provider = "sqlite"
 }
 
-enum ActivityType {
-  MEAL
-  WORKOUT
-  ROUTINE
+// ============================================================
+// PROFIL UZYTKOWNIKA (single-user MVP — jeden rekord)
+// ============================================================
+model Profile {
+  id                  String   @id @default(cuid())
+  fullName            String
+  heightCm            Int?
+  weightKg            Float?
+  birthDate           DateTime?
+  // diagnozy, eliminacje, triggery jako JSON-strings (SQLite)
+  diagnosesJson       String   @default("[]")
+  eliminationsJson    String   @default("[]")
+  knownTriggersJson   String   @default("[]")
+  goal                String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
-enum Recurrence {
-  ONCE
-  DAILY
-  WEEKDAYS
-  WEEKLY
-}
-
-model Activity {
-  id          String        @id @default(cuid())
-  type        ActivityType
-  title       String
+// ============================================================
+// SLOWNIK OBJAWOW (~50 pozycji, klinicznie polski)
+// ============================================================
+model SymptomDefinition {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique  // bloating, reflux, brain_fog...
+  namePl      String
+  nameEn      String?
+  category    String    // gut | mood | energy | cognition | skin | joints_muscles | sleep | vascular
   description String?
-  time        String
-  recurrence  Recurrence    @default(DAILY)
-  weekdays    String?
-  calories    Int?
-  protein     Int?
-  durationMin Int?
-  notes       String?
-  active      Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  logs        ActivityLog[]
+  events      Event[]   @relation("SymptomEvents")
 }
 
-model ActivityLog {
-  id          String    @id @default(cuid())
-  activityId  String
-  activity    Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  scheduledAt DateTime
-  completedAt DateTime?
-  notifiedAt  DateTime?
-  notes       String?
-  createdAt   DateTime  @default(now())
+// ============================================================
+// PROTOKOL SUPLEMENTACYJNY (lista suplementow uzytkownika)
+// ============================================================
+model SupplementProtocol {
+  id           String   @id @default(cuid())
+  name         String
+  defaultTime  String?  // "07:30" lub null jesli reguly
+  timingRule   String?  // "Przed snem", "30 min przed posilkiem", "1.5h po kolacji"
+  purpose      String?
+  dosage       String?
+  active       Boolean  @default(true)
+  events       Event[]  @relation("SupplementEvents")
+  createdAt    DateTime @default(now())
+}
 
-  @@unique([activityId, scheduledAt])
-  @@index([scheduledAt])
+// ============================================================
+// DZIEN (jeden rekord per data uzytkownika)
+// ============================================================
+model Day {
+  id                    String    @id @default(cuid())
+  date                  DateTime  @unique  // tylko data, bez godziny
+  // morning check-in
+  morningSleepQuality   Int?
+  morningSleepDurationH Float?
+  morningEnergy         Int?
+  morningMood           Int?
+  // evening reflection
+  eveningEnergy         Int?
+  eveningOverall        Int?
+  eveningStress         Int?
+  whatWorked            String?
+  whatDidntWork         String?
+  notes                 String?
+  source                String?   // "manual" | "import:chat_zdrowie" | ...
+  events                Event[]
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([date])
+}
+
+// ============================================================
+// ZDARZENIA (meal | supplement | symptom | activity | break)
+// ============================================================
+enum EventType {
+  MEAL
+  SUPPLEMENT
+  SYMPTOM
+  ACTIVITY
+  BREAK
+}
+
+model Event {
+  id          String     @id @default(cuid())
+  dayId       String
+  day         Day        @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  type        EventType
+  occurredAt  DateTime
+  // wspolne pola
+  description String?
+  severity    Int?       // dla SYMPTOM (1-10)
+  // referencje (opcjonalne)
+  symptomDefinitionId Int?
+  symptomDefinition   SymptomDefinition? @relation("SymptomEvents", fields: [symptomDefinitionId], references: [id])
+  supplementProtocolId String?
+  supplementProtocol   SupplementProtocol? @relation("SupplementEvents", fields: [supplementProtocolId], references: [id])
+  // dodatkowe dane jako JSON (post_meal_symptoms, tags, duration, intensity, ...)
+  metaJson    String?
+  createdAt   DateTime   @default(now())
+
+  @@index([dayId, occurredAt])
+  @@index([type])
 }

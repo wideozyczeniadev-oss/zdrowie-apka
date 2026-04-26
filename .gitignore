@@ -48,3 +48,9 @@ next-env.d.ts
 prisma/dev.db
 prisma/dev.db-journal
 
+# PRYWATNE DANE MEDYCZNE — NIGDY NIE COMMITOWAC
+/dane/
+*.docx
+*.xlsx
+
+
