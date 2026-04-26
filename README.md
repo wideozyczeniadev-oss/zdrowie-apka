@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Zdrowie-apka
 
-## Getting Started
+Lokalna aplikacja do planowania i przypominania o codziennych rutynach zdrowotnych:
+posiłki, treningi, nawyki. Działa lokalnie (SQLite + Next.js) z natywnymi
+powiadomieniami systemowymi (Windows toast / macOS / Linux).
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router, TypeScript, Tailwind v4)
+- **Prisma + SQLite** — baza lokalna (`prisma/dev.db`)
+- **node-notifier** — powiadomienia systemowe
+- **node-cron** — scheduler (sprawdza co minutę)
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run db:setup     # migracja + seed (przykładowe aktywności)
+npm run dev          # UI:        http://localhost:3000
+npm run scheduler    # w drugim terminalu — przypomnienia
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Skrypty
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Komenda | Opis |
+|---------|------|
+| `npm run dev` | Uruchamia Next.js dev server |
+| `npm run build` | Build produkcyjny |
+| `npm run start` | Start produkcyjny |
+| `npm run scheduler` | Background worker — wysyła powiadomienia o zaplanowanej godzinie |
+| `npm run db:migrate` | Tworzy / aktualizuje schemat bazy |
+| `npm run db:seed` | Wypełnia bazę przykładowymi aktywnościami |
+| `npm run db:setup` | Migracja + seed razem |
+| `npm run db:studio` | Prisma Studio — przeglądanie bazy w GUI |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Struktura
 
-## Learn More
+```
+zdrowie-apka/
+├── app/
+│   ├── page.tsx                    # Główny widok — plan na dziś
+│   ├── components/
+│   │   ├── ActivityList.tsx        # Lista aktywności z checkboxami
+│   │   └── ActivityForm.tsx        # Formularz dodawania
+│   ├── api/activities/
+│   │   ├── route.ts                # GET / POST aktywności
+│   │   ├── [id]/route.ts           # DELETE / PATCH
+│   │   └── toggle/route.ts         # Oznaczanie wykonania
+│   └── generated/prisma/           # Wygenerowany klient Prisma (gitignored)
+├── lib/
+│   ├── db.ts                       # Singleton PrismaClient
+│   └── schedule.ts                 # Logika powtarzalności
+├── prisma/
+│   └── schema.prisma               # Model: Activity + ActivityLog
+└── scripts/
+    ├── scheduler.ts                # Worker — powiadomienia
+    └── seed.ts                     # Przykładowe dane
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Model danych
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Activity** — aktywność do wykonania (typ: posiłek/trening/rutyna)
+- `time` — godzina dzienna w formacie `HH:mm`
+- `recurrence` — `DAILY` / `WEEKDAYS` / `WEEKLY` / `ONCE`
+- `weekdays` — dla `WEEKLY`, lista np. `MON,WED,FRI`
+- pola zdrowotne: `calories`, `protein`, `durationMin`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**ActivityLog** — instancja aktywności w danym dniu
+- `scheduledAt` — kiedy miała się odbyć
+- `completedAt` — kiedy oznaczono jako wykonane
+- `notifiedAt` — kiedy wysłano powiadomienie (zapobiega duplikatom)
 
-## Deploy on Vercel
+## Autostart schedulera (Windows)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Żeby przypomnienia działały bez ręcznego startu:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Otwórz **Harmonogram zadań** (Task Scheduler).
+2. Utwórz nowe zadanie — uruchamiane przy logowaniu użytkownika.
+3. Akcja: program `cmd.exe`, argumenty:
+   ```
+   /c cd /d D:\Antigrawity\zdrowie-apka && npm run scheduler
+   ```
+
+## Roadmapa (kolejne wersje)
+
+- [ ] Widok tygodniowy / miesięczny
+- [ ] Statystyki — % wykonania, kalorie/białko per tydzień
+- [ ] Import/eksport JSON
+- [ ] Integracja z Google Calendar
+- [ ] PWA (instalacja na telefonie)
+- [ ] Tagowanie aktywności (np. cele zdrowotne)
